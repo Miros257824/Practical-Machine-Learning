@@ -1,0 +1,112 @@
+---
+title: "Predict how well weight lifting exercises is done"
+author: "Carlos Martinez Reyes"
+date: "30/11/2020"
+output: html_document
+---
+
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people do on a regular basis is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use belt, forearm, arm, and dumbbell accelerometer data from 6 participants and predict how they performed the exercise from the class variable in the training set.
+
+## Data Preprocessing
+```{r echo=TRUE}
+library(tidyverse)
+library(randomForest)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(RGtk2)
+library(rattle)
+set.seed(9999)
+```
+## Download the Data
+```{r echo=TRUE}
+trainfile   <- './data/pml-training.csv'
+testfile <- './data/pml-testing.csv'
+url_train    <- 'http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'
+url_test  <- 'http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
+if (!file.exists("data")){
+  dir.create("data")
+}
+download.file(url_train, trainfile)
+download.file(url_test,testfile )
+training   <-read.csv(trainfile)
+```
+
+## Exploratory data analysis
+Before training a predictive model, or even before performing any computation with a new data set, it is very important to perform a descriptive exploration of the data. This process allows us to better understand what information each variable contains, as well as to detect possible errors. Furthermore, it can give clues as to which variables are not suitable as predictors in a model (accelerometer measurements).
+
+
+Multiple columns do not have measures for each observation, rather they are summary statistics, we can omit many of the summary variables, we remove all rows that contain summary statistics and not observation data. We filter all columns that are only used to present summary data. It is also not convenient to include predictors that have a variance close to zero, that is, predictors that take only a few values, of which some appear very infrequently. The problem with the latter is that they can become predictors with zero variance when the observations are split by cross-validation or bootstrap.
+
+## Data description and cleaning
+The pml-training: data / observations with which the model is trained. 
+The pml-test data: data / observations of the same type as those that make up the training set but that have not been used in the creation of the model. They are data that the model has not "seen". 
+One of the first checks to do after loading the data is to verify that each variable has been stored with the corresponding type of value, that is, that the numerical variables are numbers and the qualitative variables are factor, character or Boolean.
+
+```{r echo=TRUE}
+training   <-read.csv(trainfile, na.strings=c("NA","#DIV/0!", ""))
+testing <-read.csv(testfile , na.strings=c("NA", "#DIV/0!", ""))
+training<-training[,colSums(is.na(training)) == 0]
+testing <-testing[,colSums(is.na(testing)) == 0]
+training   <-training[,-c(1:7)]
+testing <-testing[,-c(1:7)]
+dim(training) 
+dim(testing)
+```
+Now, the cleaned training data set contains 19622 observations and 53 variables, while the testing data set contains 20 observations and 53 variables. The “classe” variable is still in the cleaned training set.
+
+## Cross-validation
+The simplest method of validation consists of dividing the available observations into two groups, one used to train the model and the other to evaluate it. The proper size of the partitions depends largely on the amount of data available and the security that is needed in estimating the error, 75% -25% usually gives good results. We will use the validation data set to conduct cross.
+```{r echo=TRUE}
+subSamples <- createDataPartition(y=training$classe, p=0.75, list=FALSE)
+subTraining <- training[subSamples, ] 
+subTesting <- training[-subSamples, ]
+dim(subTraining)
+dim(subTesting)
+```
+## Prediction models
+Once the data have been preprocessed and the predictors selected, the next step is to use a machine learning algorithm to create a model capable of representing the patterns present in the training data and generalizing them to new observations. An decision tree and random forest will be applied to the data.
+```{r echo=TRUE}
+modFitDT <- rpart(classe ~ ., data=subTraining, method="class")
+predictDT <- predict(modFitDT, subTesting, type = "class")
+fancyRpartPlot(modFitDT)
+```
+
+## Predicting with the Decision Tree Model
+```{r}
+set.seed(12345)
+confusionMatrix(predictDT, subTesting$classe)
+accuracy <- postResample(predictDT, subTesting$classe)
+accuracy
+```
+So, the estimated accuracy of the model is 74.35%
+
+## Building the Random Forest Model
+```{r}
+set.seed(12345)
+modFitRF <- randomForest(classe ~ ., data=subTraining, method="class")
+```
+## Predicting with the Random Forest Model
+
+```{r}
+predictRF <- predict(modFitRF, subTesting, type = "class")
+confusionMatrix(predictRF, subTesting$classe)
+accuracy <- postResample(predictRF, subTesting$classe)
+accuracy
+```
+So, the estimated accuracy of the model is 99.53%
+
+## Conclusion
+The confusion matrices show, that the Random Forest algorithm performens better than decision trees. The accuracy for the Random Forest model was 0.9953 compared to 0.7435 for Decision Tree model. The random Forest model is choosen.
+
+## Predicting on the Testing Data (pml-testing.csv) with the Best Predictive Model 
+
+## Random Forest Prediction
+```{r}
+predict_quiz <- predict(modFitRF, testing, type = "class")
+predict_quiz
+```
+
+
